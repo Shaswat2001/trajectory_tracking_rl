@@ -1,0 +1,28 @@
+<package format="3">
+  <name>trajectory_tracking_rl</name>
+  <version>0.0.0</version>
+  <description>
+    RL package for trajectory tracking in umanned aerial vehicles (UAV)
+  </description>
+  <author>Shaswat Garg</author>
+  <maintainer email="sis_shaswat@outlook.com"/>
+  <license>MIT</license>
+  
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>uam_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
+  <exec_depend>ros2launch</exec_depend>
+</package>

@@ -1,0 +1,23 @@
+FOUR_OBS:
+  start_pose: [3.0,1.0,1]
+  end_pose: [7,8,2]
+
+FIVE_OBS:
+  start_pose: [2.5,1.0,1]
+  end_pose: [7,-1,2]
+
+SIX_OBS:
+  start_pose: [2.5,1.0,1]
+  end_pose: [2,-8,2]
+
+SEVEN_OBS:
+  start_pose: [-1.0,-6.0,1]
+  end_pose: [9, 9, 2]
+
+NINE_OBS:
+  start_pose: [6.0,-6.0,1]
+  end_pose: [6.0,6.0,2]
+
+RANDOM_OBS:
+  start_pose: [11,-11,1]
+  end_pose: [11,11,2]
