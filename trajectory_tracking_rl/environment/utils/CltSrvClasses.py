@@ -25,6 +25,20 @@ class UavClientAsync(Node):
         self.future = self.cli.call_async(self.req)
         rclpy.spin_until_future_complete(self, self.future)
 
+class UavVelClientAsync(Node):
+
+    def __init__(self):
+        super().__init__('uam_client_async')
+        self.cli = self.create_client(RequestUavVel, 'get_uav_vel')
+        while not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('service not available, waiting again...')
+        self.req = RequestUavVel.Request()
+
+    def send_request(self, uav_pose):
+        self.req.uav_vel = uav_pose
+        self.future = self.cli.call_async(self.req)
+        rclpy.spin_until_future_complete(self, self.future)
+
 class ResetSimClientAsync(Node):
 
     def __init__(self):
@@ -34,9 +48,9 @@ class ResetSimClientAsync(Node):
             self.get_logger().info('service not available, waiting again...')
         self.req = RequestUavPose.Request()
 
-    def send_request(self):
+    def send_request(self,pose = "0, 0, 2, 0, 0, 0"):
         uav_msg = String()
-        uav_msg.data = "0, 0, 2, 0, 0, 0"
+        uav_msg.data = pose
         self.req.uav_pose = uav_msg
         self.future = self.cli.call_async(self.req)
         rclpy.spin_until_future_complete(self, self.future)

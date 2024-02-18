@@ -20,19 +20,22 @@ from trajectory_tracking_rl.exploration.OUActionNoise import OUActionNoise
 
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelEnv import BaseGazeboUAVVelEnv
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvSimp import BaseGazeboUAVVelObsEnvSimp
+from trajectory_tracking_rl.environment.BaseGazeboUAVTrajectoryTracking import BaseGazeboUAVTrajectoryTracking
+from trajectory_tracking_rl.environment.BaseGazeboUAVVelTrajectoryTracking import BaseGazeboUAVVelTrajectoryTracking
+
 from trajectory_tracking_rl.teacher import TeacherController
 
 def build_parse():
 
     parser = argparse.ArgumentParser(description="RL Algorithm Variables")
 
-    parser.add_argument("Environment",nargs="?",type=str,default="uam_gazebo",help="Name of OPEN AI environment")
+    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_tracking",help="Name of OPEN AI environment")
     parser.add_argument("input_shape",nargs="?",type=int,default=[],help="Shape of environment state")
     parser.add_argument("n_actions",nargs="?",type=int,default=[],help="shape of environment action")
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
     parser.add_argument("min_action",nargs="?",type=float,default=[],help="Min possible value of action")
 
-    parser.add_argument("Algorithm",nargs="?",type=str,default="TD3",help="Name of RL algorithm")
+    parser.add_argument("Algorithm",nargs="?",type=str,default="DDPG",help="Name of RL algorithm")
     parser.add_argument('tau',nargs="?",type=float,default=0.005)
     parser.add_argument('gamma',nargs="?",default=0.99)
     parser.add_argument('actor_lr',nargs="?",type=float,default=0.0001,help="Learning rate of Policy Network")
@@ -119,12 +122,12 @@ def train(args,env,agent,teacher):
         # for _ in range(200):
         while True:
             # s = s.reshape(1,s.shape[0])
-            if env.check_contact: 
-                env.max_time = 20
-                action = -env.action_max + (2*env.action_max)*np.random.sample(size=(1,3))
-            else:
-                action = agent.choose_action(s)
-            # action = agent.choose_action(s)
+            # if env.check_contact: 
+            #     env.max_time = 20
+            #     action = -env.action_max + (2*env.action_max)*np.random.sample(size=(1,3))
+            # else:
+            #     action = agent.choose_action(s)
+            action = agent.choose_action(s)
             next_state,rwd,done,info = env.step(action)
             ep_len+=1
             if info["constraint"] > 0:
@@ -202,6 +205,10 @@ if __name__=="__main__":
         env = BaseGazeboUAVVelEnv()
     elif "uav_vel_obs_gazebo1" == args.Environment:
         env = BaseGazeboUAVVelObsEnvSimp()
+    elif "uam_gazebo_tracking" == args.Environment:
+        env = BaseGazeboUAVTrajectoryTracking()
+    elif "uam_vel_gazebo_tracking" == args.Environment:
+        env = BaseGazeboUAVVelTrajectoryTracking()
 
     if args.enable_vision:
         vision_model = FeatureExtractor(None,None,12)

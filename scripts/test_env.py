@@ -20,19 +20,21 @@ from trajectory_tracking_rl.replay_buffer.Constraint_RB import ConstReplayBuffer
 from trajectory_tracking_rl.exploration.OUActionNoise import OUActionNoise
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelEnv import BaseGazeboUAVVelEnv
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvSimp import BaseGazeboUAVVelObsEnvSimp
+from trajectory_tracking_rl.environment.BaseGazeboUAVTrajectoryTracking import BaseGazeboUAVTrajectoryTracking
+from trajectory_tracking_rl.environment.BaseGazeboUAVVelTrajectoryTracking import BaseGazeboUAVVelTrajectoryTracking
 from trajectory_tracking_rl.teacher import TeacherController
 
 def build_parse():
 
     parser = argparse.ArgumentParser(description="RL Algorithm Variables")
 
-    parser.add_argument("Environment",nargs="?",type=str,default="uav_vel_obs_gazebo1",help="Name of OPEN AI environment")
+    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_tracking",help="Name of OPEN AI environment")
     parser.add_argument("input_shape",nargs="?",type=int,default=[],help="Shape of environment state")
     parser.add_argument("n_actions",nargs="?",type=int,default=[],help="shape of environment action")
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
     parser.add_argument("min_action",nargs="?",type=float,default=[],help="Min possible value of action")
 
-    parser.add_argument("Algorithm",nargs="?",type=str,default="SAC",help="Name of RL algorithm")
+    parser.add_argument("Algorithm",nargs="?",type=str,default="DDPG",help="Name of RL algorithm")
     parser.add_argument('tau',nargs="?",type=float,default=0.005)
     parser.add_argument('gamma',nargs="?",default=0.99)
     parser.add_argument('actor_lr',nargs="?",type=float,default=0.0001,help="Learning rate of Policy Network")
@@ -99,12 +101,7 @@ def build_parse():
 def train(args,env,agent,teacher):
 
     velocity_traj = []
-    # FOUR OBS - [7,8,2]
-    # FIVE OBS - [7,-1,2]
-    # SIX OBS - [2,-8,2]
-    # SEVEN OBS - [9, 9, 2]
-    s = env.reset_test(np.array([11,11,2]),205,args.Algorithm)
-    # s = env.reset_test(pose_des = np.array([7,7,2]),max_time = 185,alg = args.Algorithm)
+    s = env.reset(pose_des = np.array([0,1,2]),max_time = 20)
     agent.load(args.Environment)
     start_time = time.time()
     # for _ in range(200):
@@ -114,19 +111,22 @@ def train(args,env,agent,teacher):
         action = agent.choose_action(s,"testing")
         print(f"Time in seconds : {time.time() - start_time}")
         next_state,rwd,done,info = env.step(action)
-        print(env.vel)
-        velocity_traj.append(env.vel)
-        # print(next_state)
+        print(env.pose)
+        velocity_traj.append(list(env.pose))
         if done:
             break
             
         s = next_state
-        time.sleep(0.07)
-        # print(env.check_contact)
 
-    f = open("config/saves/velocity_nine.pkl","wb")
-    pickle.dump(velocity_traj,f)
-    f.close()
+
+    
+    velocity_traj = np.array(velocity_traj)
+    plt.plot(velocity_traj[:,0],velocity_traj[:,1])
+    plt.plot(env.trajectory[:,0],env.trajectory[:,1])
+    plt.show()
+    # f = open("config/saves/velocity_nine.pkl","wb")
+    # pickle.dump(velocity_traj,f)
+    # f.close()
 
 if __name__=="__main__":
 
@@ -141,6 +141,10 @@ if __name__=="__main__":
         env = BaseGazeboUAVVelEnv()
     elif "uav_vel_obs_gazebo1" == args.Environment:
         env = BaseGazeboUAVVelObsEnvSimp()
+    elif "uam_gazebo_tracking" == args.Environment:
+        env = BaseGazeboUAVTrajectoryTracking()
+    elif "uam_vel_gazebo_tracking" == args.Environment:
+        env = BaseGazeboUAVVelTrajectoryTracking()
 
     if args.enable_vision:
         vision_model = FeatureExtractor(None,None,12)
@@ -149,7 +153,7 @@ if __name__=="__main__":
         vision_model = None
         replay_buffer = ReplayBuffer
     
-    args.state_size = 363
+    args.state_size = env.state_size
     args.input_shape = env.state_size
     args.n_actions = env.action_space.shape[0]
     args.max_action = env.action_space.high
@@ -157,38 +161,38 @@ if __name__=="__main__":
     args.safe_max_action = env.safe_action_max
     args.safe_min_action = -env.safe_action_max
 
-    for i in ["TD3"]:
+    # for i in ["TD3"]:
 
-        args.Algorithm = i
+    #     args.Algorithm = i
 
-        if args.Algorithm == "DDPG":
-            agent = DDPG.DDPG(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = replay_buffer,exploration = OUActionNoise,vision = vision_model)
-        elif args.Algorithm == "TD3":
-            agent = TD3.TD3(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "SAC":
-            agent = SAC.SAC(args = args,policy = GaussianPolicyNetwork,critic = QNetwork,valueNet=VNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "SoftQ":
-            agent = SoftQ.SoftQ(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "RCRL":
-            agent = RCRL.RCRL(args = args,policy = PolicyNetwork,critic = QNetwork,multiplier=MultiplierNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "SEditor":
-            agent = SEditor.SEditor(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "USL":
-            agent = USL.USL(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "SAAC":
-            agent = SAAC.SAAC(args = args,policy = GaussianPolicyNetwork,critic = QNetwork,valueNet=VNetwork, replayBuff = CostReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "IDEA1":
-            agent = IDEA1.IDEA1(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "IDEA2":
-            agent = IDEA2.IDEA2(args = args,policy = SafePolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "IDEA3":
-            agent = IDEA3.IDEA3(args = args,policy = SafePolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
-        elif args.Algorithm == "IDEA4":
-            agent = IDEA4.IDEA4(args = args,policy = PolicyNetwork,critic = QNetwork,nvp=RealNVP,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    if args.Algorithm == "DDPG":
+        agent = DDPG.DDPG(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = replay_buffer,exploration = OUActionNoise,vision = vision_model)
+    elif args.Algorithm == "TD3":
+        agent = TD3.TD3(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "SAC":
+        agent = SAC.SAC(args = args,policy = GaussianPolicyNetwork,critic = QNetwork,valueNet=VNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "SoftQ":
+        agent = SoftQ.SoftQ(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "RCRL":
+        agent = RCRL.RCRL(args = args,policy = PolicyNetwork,critic = QNetwork,multiplier=MultiplierNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "SEditor":
+        agent = SEditor.SEditor(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "USL":
+        agent = USL.USL(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "SAAC":
+        agent = SAAC.SAAC(args = args,policy = GaussianPolicyNetwork,critic = QNetwork,valueNet=VNetwork, replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "IDEA1":
+        agent = IDEA1.IDEA1(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "IDEA2":
+        agent = IDEA2.IDEA2(args = args,policy = SafePolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "IDEA3":
+        agent = IDEA3.IDEA3(args = args,policy = SafePolicyNetwork,critic = QNetwork,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
+    elif args.Algorithm == "IDEA4":
+        agent = IDEA4.IDEA4(args = args,policy = PolicyNetwork,critic = QNetwork,nvp=RealNVP,replayBuff = CostReplayBuffer,exploration = OUActionNoise)
 
-        if "teach" in args.Environment:
-            teacher = TeacherController.TeacherController(param_bound,env,args)
-        else:
-            teacher = None
+    if "teach" in args.Environment:
+        teacher = TeacherController.TeacherController(param_bound,env,args)
+    else:
+        teacher = None
 
-        train(args,env,agent,teacher)
+    train(args,env,agent,teacher)
