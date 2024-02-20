@@ -93,7 +93,7 @@ class DDPG:
 
         self.replay_buffer = self.replayBuff(input_shape = self.args.state_size,mem_size = self.args.mem_size,n_actions = self.args.n_actions,batch_size = self.args.batch_size)
         # Exploration Technique
-        self.noiseOBJ = self.exploration(mean=np.zeros(self.args.n_actions), std_deviation=float(0.04) * np.ones(self.args.n_actions))
+        self.noiseOBJ = self.exploration(mean=np.zeros(self.args.n_actions), std_deviation=float(0.08) * np.ones(self.args.n_actions))
         
         self.PolicyNetwork = self.policy(self.args.input_shape,self.args.n_actions,self.args.max_action)
         self.PolicyOptimizer = torch.optim.Adam(self.PolicyNetwork.parameters(),lr=self.args.actor_lr)

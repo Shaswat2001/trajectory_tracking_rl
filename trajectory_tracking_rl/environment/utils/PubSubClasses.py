@@ -15,6 +15,7 @@ class LidarSubscriber(Node):
         super().__init__('lidar_subscriber')
 
         self.lidar_range = None
+        self.contact = False
         self.ee_pose_subscription = self.create_subscription(LaserScan,"/laser_controller/out",self.lidar_callback,10)
         self.ee_pose_subscription  # prevent unused variable warning
 
@@ -24,14 +25,13 @@ class LidarSubscriber(Node):
             return np.zeros(shape=(360)),False
         
         lidar_data = np.array(self.lidar_range)
-        contact = False
         for i in range(lidar_data.shape[0]):
             if lidar_data[i] == np.inf:
                 lidar_data[i] = 1
             if lidar_data[i] < 0.2:
-                contact = True
+                self.contact = True
 
-        return lidar_data,contact
+        return lidar_data,self.contact
     
     def lidar_callback(self, msg):
 

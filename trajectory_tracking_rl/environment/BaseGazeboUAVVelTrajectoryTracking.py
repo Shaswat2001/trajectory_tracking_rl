@@ -45,7 +45,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.max_points = 9
         self.current_target = 1
         self.max_time = 3*(self.max_points - 1)
-        self.max_trajectory_step = 4
+        self.max_trajectory_step = 3
         self.dt = 0.04
         self.current_time = 0
         self.current_subtraj_time = 0
@@ -136,10 +136,14 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
                 self.current_subtraj_time = 0
                 reward = 10
             else:
-                reward = -(deviation*15) -(pose_error*10)
 
                 if lidar is not None:
-                    reward += 2*np.min(lidar)
+                    if np.min(lidar) > 0.4:
+                        reward = -deviation*15 - pose_error*10
+                    else:
+                        reward = -pose_error*6 + 5*np.min(lidar)
+                else:
+                    reward = -deviation*15 - pose_error*10
 
         else:
             reward = -300
@@ -223,10 +227,8 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         
     def reset(self,pose = np.array([0,0,2]),pose_des = None,max_time = 10):
 
-        #initial conditions
         self.pose = pose
         self.vel = np.array([0,0,0])
-
         self.previous_pose = pose
         
         if pose_des is None:
@@ -250,7 +252,9 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         self.publish_simulator(self.vel)
         self.reset_sim.send_request(pose_string)
+        time.sleep(0.1)
 
+        self.lidar_subscriber.contact = False
         pose_diff = self.get_subregion()
         
         lidar,self.check_contact = self.get_lidar_data()

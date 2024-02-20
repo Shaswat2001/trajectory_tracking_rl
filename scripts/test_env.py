@@ -34,7 +34,7 @@ def build_parse():
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
     parser.add_argument("min_action",nargs="?",type=float,default=[],help="Min possible value of action")
 
-    parser.add_argument("Algorithm",nargs="?",type=str,default="DDPG",help="Name of RL algorithm")
+    parser.add_argument("Algorithm",nargs="?",type=str,default="TD3",help="Name of RL algorithm")
     parser.add_argument('tau',nargs="?",type=float,default=0.005)
     parser.add_argument('gamma',nargs="?",default=0.99)
     parser.add_argument('actor_lr',nargs="?",type=float,default=0.0001,help="Learning rate of Policy Network")
@@ -101,14 +101,14 @@ def build_parse():
 def train(args,env,agent,teacher):
 
     velocity_traj = []
-    s = env.reset(pose_des = np.array([0,1,2]),max_time = 20)
+    s = env.reset(pose_des = np.array([1,1,2]),max_time = 20)
     agent.load(args.Environment)
     start_time = time.time()
     # for _ in range(200):
     while True:
         # s = s.reshape(1,s.shape[0])
         start_time = time.time()
-        action = agent.choose_action(s,"testing")
+        action = agent.choose_action(s,"training")
         print(f"Time in seconds : {time.time() - start_time}")
         next_state,rwd,done,info = env.step(action)
         print(env.pose)
