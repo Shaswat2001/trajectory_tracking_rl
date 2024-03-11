@@ -35,7 +35,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.executor_thread.start()
 
         self.state = None
-        self.state_size = 9
+        self.state_size = 369
         self.action_max = np.array([0.1,0.1])
         
         self.pose = None
@@ -75,7 +75,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         current_target_pose,self.current_target = self.get_closest_point()
         # current_target_pose = self.trajectory[self.current_target]
-        
+        lidar,self.check_contact = self.get_lidar_data()
         self.const_broken = self.constraint_broken()
         self.pose_error = self.get_error(current_target_pose)
         self.global_error = self.get_error(self.q_des)
@@ -83,7 +83,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         self.current_time += 1
         self.current_subtraj_time += 1
-        reward,done = self.get_reward()
+        reward,done = self.get_reward(lidar)
         constraint = self.get_constraint()
         info = self.get_info(constraint)
 
@@ -93,8 +93,8 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
             print(f"The end pose of UAV is : {self.pose[:3]}")
 
         pose_diff = self.get_subregion()
-        prp_state = pose_diff
-        # prp_state = np.concatenate((pose_diff,lidar))
+        # prp_state = pose_diff
+        prp_state = np.concatenate((pose_diff,lidar))
         prp_state = prp_state.reshape(1,-1)
 
         # if self.const_broken:
@@ -124,7 +124,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         return distance
 
-    def get_reward(self):
+    def get_reward(self,lidar = None):
         
         done = False
         pose_error = self.pose_error
@@ -140,7 +140,13 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
                 reward = 10
             else:
 
-                reward = -deviation*15 - pose_error*10 - global_error*10
+                if lidar is not None:
+                    # if np.min(lidar) > 0.25:
+                    #     reward = -deviation*15 - pose_error*10 - global_error*10
+                    # else:
+                    reward = 1*np.min(lidar) - global_error*15 -deviation*7
+                else:
+                    reward = -deviation*15 - pose_error*10 - global_error*10
 
         else:
             reward = -300
@@ -264,13 +270,12 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.lidar_subscriber.contact = False
         pose_diff = self.get_subregion()
         
-        # lidar,self.check_contact = self.get_lidar_data()
-        prp_state = pose_diff
-        # prp_state = np.concatenate((pose_diff,lidar))
+        lidar,self.check_contact = self.get_lidar_data()
+        # prp_state = pose_diff
+        prp_state = np.concatenate((pose_diff,lidar))
         prp_state = prp_state.reshape(1,-1)
         self.current_time = 0
         self.const_broken = False
-        self.check_contact = False
         self.current_target = 1
         self.current_subtraj_time = 0
         self.max_time = max_time
@@ -305,7 +310,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
     
     def generate_sample_trajectory(self,q_start,q_des):
 
-        fraction = np.linspace(0,1,10)
+        fraction = np.linspace(0,1,5)
 
         points = q_start + fraction[:,np.newaxis]*(q_des - q_start)
 
