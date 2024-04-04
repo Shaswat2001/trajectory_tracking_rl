@@ -29,7 +29,7 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
 
         self.state = None
         self.state_size = 363
-        self.action_max = np.array([0.3,0.3,0.3])
+        self.action_max = np.array([0.1,0.1])
         
         self.q = None
         self.q_des = None
@@ -58,24 +58,12 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
     def step(self, action):
         
         action = action[0]
-        self.vel = self.vel + action[:3]
+        self.vel[:2] = self.vel[:2] + action[:2]
 
         self.vel = np.clip(self.vel,self.min_q_bound,self.max_q_bound)
         self.pose = np.array([self.dt*self.vel[i] + self.pose[i] for i in range(self.vel.shape[0])])
         self.pose = np.clip(self.pose,np.array([-12,-12,0.5]),np.array([12,12,3]))
         self.publish_simulator(self.pose)
-
-        self.tf_publisher.make_transforms("base_link",self.pose)
-
-        if self.algorithm == "DDPG":
-            self.path_publisher_ddpg.add_point(self.pose)
-        elif self.algorithm == "TD3":
-            self.path_publisher_td3.add_point(self.pose)
-        elif self.algorithm == "SAC":
-            self.path_publisher_sac.add_point(self.pose)
-        elif self.algorithm == "SoftQ":
-            self.path_publisher_softq.add_point(self.pose)
-
         lidar,self.check_contact = self.get_lidar_data()
         # self.check_contact = self.collision_sub.get_collision_info()
 
@@ -85,46 +73,24 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
 
         self.const_broken = self.constraint_broken()
         self.pose_error = self.get_error()
-        reward,done = self.get_reward()
+        reward,done = self.get_reward(lidar)
         constraint = self.get_constraint()
         info = self.get_info(constraint)
 
-        if done:
-
-            if self.algorithm == "DDPG":
-                self.path_publisher_ddpg.publish_robot()
-            elif self.algorithm == "TD3":
-                self.path_publisher_td3.publish_robot()
-            elif self.algorithm == "SAC":
-                self.path_publisher_sac.publish_robot()
-            elif self.algorithm == "SoftQ":
-                self.path_publisher_softq.publish_robot()
-            self.tf_publisher.make_transforms("base_link",np.array([0.0,0.0,2.0]))
-            self.publish_simulator(np.array([0.0,0.0,2.0]))
-            
+        if done:            
             print(f"The constraint is broken : {self.const_broken}")
             print(f"The position error at the end : {self.pose_error}")
             print(f"The end pose of UAV is : {self.pose[:3]}")
 
         pose_diff = self.q_des - self.pose
+        pose_diff = np.clip(pose_diff,np.array([-1,-1,-1]),np.array([1,1,1]))
         prp_state = np.concatenate((pose_diff,lidar))
         prp_state = prp_state.reshape(1,-1)
         self.current_time += 1
 
-        if self.const_broken:
-
-            self.get_safe_pose()
-            self.publish_simulator(self.previous_pose)
-            self.pose = self.previous_pose
-
-            # self.reset_sim.send_request(uav_pos_ort)
-
-            self.vel = self.vel - action[:3]
-            # self.publish_simulator(self.vel)
-
         return prp_state, reward, done, info
 
-    def get_reward(self):
+    def get_reward(self,lidar):
         
         done = False
         pose_error = self.pose_error
@@ -134,16 +100,13 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
 
             if pose_error < 0.1:
                 done = True
-                reward = 10
-            if pose_error < 0.5:
-                done = True
+                reward = 30
             else:
-                reward = -(pose_error*10)
+                reward = -(pose_error*25) + 9*np.min(lidar)
         
         else:
-            reward = -20
-            if self.algorithm == "SAC" and self.algorithm == "SoftQ":
-                done = True
+            reward = -300
+            done = True
 
         if self.current_time > self.max_time:
             done = True
@@ -214,24 +177,27 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
         # self.qdot = np.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01]) #initial velocity [x; y; z] in inertial frame - m/s
         
         if pose_des is None:
-            self.q_des = np.random.randint([-1,-1,1],[2,2,4])
+            self.q_des = np.random.randint([-1,-1,2],[2,2,3])
         else:
             self.q_des = pose_des
 
         print(f"The target pose is : {self.q_des}")
 
-        self.tf_publisher.make_transforms("base_link",self.pose)
         self.publish_simulator(self.pose)
         
         lidar,self.check_contact = self.get_lidar_data()
         # print(f"the man pose : {self.man_pos}")
         pose_diff = self.q_des - self.pose
-        # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
+        pose_diff = np.clip(pose_diff,np.array([-1,-1,-1]),np.array([1,1,1]))
         prp_state = np.concatenate((pose_diff,lidar))
         prp_state = prp_state.reshape(1,-1)
         self.current_time = 0
         self.const_broken = False
-        self.max_time = 10
+
+        if np.all(self.q_des[:2] == np.array([-1,-1])) or np.all(self.q_des[:2] == np.array([1,1])):
+            self.max_time = 15
+        else:
+            self.max_time = max_time
         time.sleep(0.1)
 
         return prp_state
@@ -243,14 +209,7 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
         self.vel = np.array([0,0,0])
         self.previous_pose = self.pose
         self.algorithm = algorithm
-        if self.algorithm == "DDPG":
-            self.path_publisher_ddpg.add_point(self.pose)
-        elif self.algorithm == "TD3":
-            self.path_publisher_td3.add_point(self.pose)
-        elif self.algorithm == "SAC":
-            self.path_publisher_sac.add_point(self.pose)
-        elif self.algorithm == "SoftQ":
-            self.path_publisher_softq.add_point(self.pose)
+
         self.q_des = q_des
         self.max_time = max_time
         print(f"The target pose is : {self.q_des}")
@@ -267,7 +226,7 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
         time.sleep(0.1)
 
         return prp_state
-    
+        
     def publish_simulator(self,q):
         
         uav_pos_ort = list(q)[0:3]
@@ -283,26 +242,3 @@ class BaseGazeboUAVVelObsEnvSimp(gym.Env):
 
         data,contact = self.lidar_subscriber.get_state()
         return data,contact
-    
-    def get_safe_pose(self):
-
-        py = self.pose[1] - self.previous_pose[1]
-        px = self.pose[0] - self.previous_pose[0]
-
-        if (py > 0 and px > 0) or (py < 0 and px < 0):
-
-            if py > 0:
-                self.previous_pose[0]+= 0.05
-                self.previous_pose[1]-= 0.05
-            else:
-                self.previous_pose[0]-= 0.05
-                self.previous_pose[1]+= 0.05
-
-        else:
-
-            if py > 0:
-                self.previous_pose[0]-= 0.05
-                self.previous_pose[1]-= 0.05
-            else:
-                self.previous_pose[0]+= 0.05
-                self.previous_pose[1]+= 0.05
