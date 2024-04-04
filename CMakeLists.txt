@@ -34,6 +34,7 @@ install(PROGRAMS
   scripts/main.py
   scripts/test_env.py
   scripts/compile_result.py
+  scripts/test_twin_agent.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
