@@ -111,8 +111,8 @@ def train(args1,args2,env1,env2,agent1,agent2,teacher):
     # SEVEN OBS - [9, 9, 2]
     s = env1.reset(pose = np.array([-5,-5,2]), pose_des = np.array([5,5,2]),max_time = 300)
     # s = env.reset_test(pose_des = np.array([7,7,2]),max_time = 185,alg = args.Algorithm)
-    agent1.load("uam_vel_gazebo_tracking")
-    agent2.load("uav_vel_obs_gazebo_real_r2")
+    # agent1.load("uam_vel_gazebo_tracking")
+    agent2.load("uam_vel_gazebo_obs_r2")
     start_time = time.time()  
     # for _ in range(200):
     while True:

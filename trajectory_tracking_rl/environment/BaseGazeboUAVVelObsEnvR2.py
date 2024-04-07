@@ -6,6 +6,7 @@ from math import pi
 from gym import spaces
 import numpy as np
 import threading
+import math
 import time
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
@@ -102,14 +103,24 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
         
         done = False
         pose_error = self.pose_error
+        distance = np.linalg.norm(self.pose - self.starting_pose)
         reward = 0
         if not self.const_broken:
             self.previous_pose = self.pose
 
-            reward = np.min(lidar)
+            collision_rwd = self.collision_reward(lidar)
+
+            if np.min(lidar) > 1:
+                reward = 3*np.min(lidar)
+            else:
+                reward = -5*np.min(lidar)
+
+            reward += 2*distance
+
+            reward += 4*collision_rwd
         
         else:
-            reward = -100
+            reward = -200
             done = True
 
         if self.current_time > self.max_time:
@@ -169,10 +180,11 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
 
         return pose_error
         
-    def reset(self,pose = np.array([0,-2,2]),pose_des = None,max_time = 80,publish_path = False):
+    def reset(self,pose = np.array([0,-2,2]),pose_des = None,max_time = 110,publish_path = False):
 
         #initial conditions
         self.pose = pose
+        self.starting_pose = pose
         self.vel = np.array([0,0,0])
         self.previous_pose = pose
         # self.qdot = np.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01]) #initial velocity [x; y; z] in inertial frame - m/s
@@ -235,6 +247,40 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
         time.sleep(0.1)
 
         return prp_state
+    
+    def collision_reward(self,lidar):
+
+        theta_v = math.atan2(self.vel[1],self.vel[0])
+        if theta_v < 0:
+            theta_v += 2 * math.pi
+        i = 0
+
+        start_theta = 0
+        reward = 0
+        while i < lidar.shape[0]:
+
+            if lidar[i] < 1:
+                start_theta = i*np.pi/180
+                i += 1
+                while i < lidar.shape[0]:
+                    
+                    if lidar[i] < 1:
+                        i += 1
+                    else:
+                        break
+
+                final_theta = i*np.pi/180
+
+                if start_theta <= theta_v <= final_theta:
+                    reward = -10*np.linalg.norm(self.vel)
+                    return reward
+                else:
+                    value = min(abs(theta_v - start_theta),abs(theta_v - final_theta))
+                    reward = min(reward,value)
+            else:
+                i += 1
+
+        return reward
     
     def publish_simulator(self,q):
     

@@ -305,8 +305,8 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        # prp_state = np.concatenate((pose_diff,lidar))
-        prp_state = lidar
+        prp_state = np.concatenate((self.vel[:2],lidar))
+        # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
 
         return prp_state

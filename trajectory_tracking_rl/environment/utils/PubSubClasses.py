@@ -27,8 +27,8 @@ class LidarSubscriber(Node):
         contact = False
         for i in range(lidar_data.shape[0]):
             if lidar_data[i] == np.inf:
-                lidar_data[i] = 1
-            if lidar_data[i] < 0.2:
+                lidar_data[i] = 4.1
+            if lidar_data[i] < 0.35:
                 contact = True
 
         return lidar_data,contact

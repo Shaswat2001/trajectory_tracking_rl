@@ -20,6 +20,7 @@ from trajectory_tracking_rl.exploration.OUActionNoise import OUActionNoise
 
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelEnv import BaseGazeboUAVVelEnv
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvSimp import BaseGazeboUAVVelObsEnvSimp
+from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvR2 import BaseGazeboUAVVelObsEnvR2
 from trajectory_tracking_rl.environment.BaseGazeboUAVTrajectoryTracking import BaseGazeboUAVTrajectoryTracking
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelTrajectoryTracking import BaseGazeboUAVVelTrajectoryTracking
 
@@ -29,7 +30,7 @@ def build_parse():
 
     parser = argparse.ArgumentParser(description="RL Algorithm Variables")
 
-    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_tracking",help="Name of OPEN AI environment")
+    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_obs_r2",help="Name of OPEN AI environment")
     parser.add_argument("input_shape",nargs="?",type=int,default=[],help="Shape of environment state")
     parser.add_argument("n_actions",nargs="?",type=int,default=[],help="shape of environment action")
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
@@ -209,6 +210,8 @@ if __name__=="__main__":
         env = BaseGazeboUAVTrajectoryTracking()
     elif "uam_vel_gazebo_tracking" == args.Environment:
         env = BaseGazeboUAVVelTrajectoryTracking()
+    elif "uam_vel_gazebo_obs_r2" == args.Environment:
+        env = BaseGazeboUAVVelObsEnvR2()
 
     if args.enable_vision:
         vision_model = FeatureExtractor(None,None,12)
