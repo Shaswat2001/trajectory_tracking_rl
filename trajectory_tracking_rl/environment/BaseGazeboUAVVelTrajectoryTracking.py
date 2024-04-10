@@ -42,7 +42,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.q_des = None
         self.check_contact = False
 
-        self.max_points = 9
+        self.max_points = 29
         self.current_target = 1
         self.max_time = 25
         self.max_trajectory_step = 6
@@ -73,7 +73,14 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         self.get_uav_pose()
 
-        current_target_pose,self.current_target = self.get_closest_point()
+        current_target_pose,current_target = self.get_closest_point()
+
+        if current_target < self.current_target and self.current_target > 6:
+            self.current_target += 1
+            self.current_target = min(29,self.current_target)
+            current_target_pose = self.trajectory[self.current_target]
+        else:
+            self.current_target = current_target
         # current_target_pose = self.trajectory[self.current_target]
         
         self.const_broken = self.constraint_broken()
@@ -271,7 +278,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.current_time = 0
         self.const_broken = False
         self.check_contact = False
-        self.current_target = 1
+        self.current_target = 0
         self.current_subtraj_time = 0
         self.max_time = max_time
         time.sleep(0.1)
@@ -302,14 +309,19 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
     def get_intermediate_state(self):
 
         lidar,_ = self.get_lidar_data()
-
+        heading = self.get_desired_heading()
         pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((self.vel[:2],lidar))
+        prp_state = np.concatenate((heading,self.vel[:2],lidar))
         # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
 
         return prp_state
+    
+    def update_robot_state(self,pose,vel):
+
+        self.pose = pose
+        self.vel = vel
 
     def get_lidar_data(self):
 
@@ -318,31 +330,15 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
     
     def generate_sample_trajectory(self,q_start,q_des):
 
-        fraction = np.linspace(0,1,10)
-
+        fraction = np.linspace(0,1,30)
+        print(fraction.shape)
         points = q_start + fraction[:,np.newaxis]*(q_des - q_start)
 
         return np.round(points,3)
 
-    def get_safe_pose(self):
+    def get_desired_heading(self):
 
-        py = self.pose[1] - self.previous_pose[1]
-        px = self.pose[0] - self.previous_pose[0]
+        heading = self.q_des - self.pose
+        heading = heading/np.linalg.norm(heading)
 
-        if (py > 0 and px > 0) or (py < 0 and px < 0):
-
-            if py > 0:
-                self.previous_pose[0]+= 0.05
-                self.previous_pose[1]-= 0.05
-            else:
-                self.previous_pose[0]-= 0.05
-                self.previous_pose[1]+= 0.05
-
-        else:
-
-            if py > 0:
-                self.previous_pose[0]-= 0.05
-                self.previous_pose[1]-= 0.05
-            else:
-                self.previous_pose[0]+= 0.05
-                self.previous_pose[1]+= 0.05
+        return heading[:2]

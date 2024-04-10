@@ -109,36 +109,43 @@ def train(args1,args2,env1,env2,agent1,agent2,teacher):
     # FIVE OBS - [7,-1,2]
     # SIX OBS - [2,-8,2]
     # SEVEN OBS - [9, 9, 2]
-    s = env1.reset(pose = np.array([-5,-5,2]), pose_des = np.array([5,5,2]),max_time = 300)
+    s = env1.reset(pose = np.array([-5,-5,2]), pose_des = np.array([5,5,2]),max_time = 400)
+    action = np.zeros((2))
     # s = env.reset_test(pose_des = np.array([7,7,2]),max_time = 185,alg = args.Algorithm)
-    # agent1.load("uam_vel_gazebo_tracking")
+    agent1.load("uam_vel_gazebo_tracking")
     agent2.load("uam_vel_gazebo_obs_r2")
     start_time = time.time()  
+    obs_switch = 0
     # for _ in range(200):
     while True:
         # s = s.reshape(1,s.shape[0])
         start_time = time.time()
+        if len(action.shape) == 2:
+            action = action[0]
 
-        if np.min(env1.get_lidar_data()[0]) < 1:
+        if (np.min(env1.get_lidar_data()[0]) < 1 or env2.collision_reward(env1.get_lidar_data()[0],action,env1.get_desired_heading())[0] < 0):
             s = env1.get_intermediate_state()
             print("MAKING SWITCH")
             action = agent2.choose_action(s,"testing")
+
             action = action[:2]
-        else:
+            # obs_switch += 1
+            # if obs_switch > 100:
+            #     obs_switch = 0
+        elif obs_switch == 0:
             action = agent1.choose_action(s,"testing")
-            
+        
         print(f"Time in seconds : {time.time() - start_time}")
 
         next_state,rwd,done,info = env1.step(action)
-        # print(env.vel)
         velocity_traj.append(list(env1.pose))
+        print()
         # print(next_state)
         if done:
             break
             
         s = next_state
         time.sleep(0.07)
-        # print(env.check_contact)
 
     velocity_traj = np.array(velocity_traj)
     plt.plot(velocity_traj[:,0],velocity_traj[:,1])

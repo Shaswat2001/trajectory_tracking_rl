@@ -11,7 +11,7 @@ from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
 
 from trajectory_tracking_rl.environment.utils.CltSrvClasses import UavClientAsync
-from trajectory_tracking_rl.environment.utils.PubSubClasses import StaticFramePublisher, LidarSubscriber, PathPublisherDDPG, PathPublisherSAC, PathPublisherSoftQ, PathPublisherTD3
+from trajectory_tracking_rl.environment.utils.PubSubClasses import LidarSubscriber, PathPublisherDDPG, PathPublisherSAC, PathPublisherSoftQ, PathPublisherTD3
 
 class BaseGazeboUAVVelObsEnvSimp(gym.Env):
     

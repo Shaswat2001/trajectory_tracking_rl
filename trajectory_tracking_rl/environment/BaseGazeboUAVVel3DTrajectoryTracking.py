@@ -12,7 +12,7 @@ import math
 from trajectory_tracking_rl.environment.utils.CltSrvClasses import UavClientAsync,UavVelClientAsync, ResetSimClientAsync, GetUavPoseClientAsync, PauseGazeboClient, UnPauseGazeboClient
 from trajectory_tracking_rl.environment.utils.PubSubClasses import StaticFramePublisher, LidarSubscriber, PathPublisherDDPG, PathPublisherSAC, PathPublisherSoftQ, PathPublisherTD3
 
-class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
+class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
     
     def __init__(self): 
         
@@ -35,8 +35,8 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.executor_thread.start()
 
         self.state = None
-        self.state_size = 369
-        self.action_max = np.array([0.1,0.1])
+        self.state_size = 9
+        self.action_max = np.array([0.1,0.1,0.1])
         
         self.pose = None
         self.q_des = None
@@ -67,7 +67,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
     def step(self, action):
         
         action = action[0]
-        self.vel[:2] = self.vel[:2] + action[:2]
+        self.vel = self.vel + action
         self.vel = np.clip(self.vel,self.min_q_bound,self.max_q_bound)
         self.publish_simulator(self.vel)
 
@@ -75,7 +75,14 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         # current_target_pose,self.current_target = self.get_closest_point()
         current_target_pose = self.trajectory[self.current_target]
-        lidar,self.check_contact = self.get_lidar_data()
+        # if current_target < self.current_target and self.current_target > 6:
+        #     self.current_target += 1
+        #     self.current_target = min(29,self.current_target)
+        #     current_target_pose = self.trajectory[self.current_target]
+        # else:
+        #     self.current_target = current_target
+        # current_target_pose = self.trajectory[self.current_target]
+        
         self.const_broken = self.constraint_broken()
         self.pose_error = self.get_error(current_target_pose)
         self.global_error = self.get_error(self.q_des)
@@ -83,7 +90,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         self.current_time += 1
         self.current_subtraj_time += 1
-        reward,done = self.get_reward(lidar)
+        reward,done = self.get_reward()
         constraint = self.get_constraint()
         info = self.get_info(constraint)
 
@@ -93,8 +100,8 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
             print(f"The end pose of UAV is : {self.pose[:3]}")
 
         pose_diff = self.get_subregion()
-        # prp_state = pose_diff
-        prp_state = np.concatenate((pose_diff,lidar))
+        prp_state = pose_diff
+        # prp_state = np.concatenate((pose_diff,lidar))
         prp_state = prp_state.reshape(1,-1)
 
         # if self.const_broken:
@@ -116,15 +123,16 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         # if current_target_pose[0] == initial_pose[0]:
         #     distance = abs(self.pose[0] - initial_pose[0])
 
-        A = current_target_pose[1] - initial_pose[1]
-        B = current_target_pose[0] - initial_pose[0]
-        C = current_target_pose[0]*initial_pose[1] - current_target_pose[1]*initial_pose[0]
+        
+        A = np.linalg.norm(current_target_pose - initial_pose)
+        B = np.linalg.norm(current_target_pose - self.pose)
+        C = np.linalg.norm(np.dot(current_target_pose - self.pose,current_target_pose - initial_pose))
 
-        distance = abs(A*self.pose[0] + B*self.pose[1] + C)/math.sqrt(A**2 + B**2)
+        distance = math.sqrt(abs((B**2)*(A**2) - C**2)/A**2)
 
         return distance
 
-    def get_reward(self,lidar = None):
+    def get_reward(self):
         
         done = False
         pose_error = self.pose_error
@@ -140,17 +148,11 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
                 reward = 10
             else:
 
-                if lidar is not None:
-                    # if np.min(lidar) > 0.25:
-                    #     reward = -deviation*15 - pose_error*10 - global_error*10
-                    # else:
-                    reward = 1*np.min(lidar) - global_error*15 -deviation*7
-                else:
-                    reward = -deviation*15 - pose_error*10 - global_error*10
+                reward = -deviation*4 - pose_error*2 - global_error*3
 
         else:
             reward = -300
-            done = True
+            # done = True
 
         if self.current_subtraj_time == 3:
             # print(f"Maximum error : {pose_error}")
@@ -173,9 +175,16 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
 
         distance = np.linalg.norm(self.trajectory - self.pose, axis = 1)
 
-        closest_point_arg = np.argmin(distance)
+        ahead_indices = np.where(np.dot(self.trajectory - self.pose, self.pose) > 0)[0]
 
-        return self.trajectory[closest_point_arg],closest_point_arg
+        if len(ahead_indices) == 0:
+            closest_point_arg = np.argmin(distance)
+            return self.trajectory[closest_point_arg],closest_point_arg
+        
+        else:
+            closest_point_arg = ahead_indices[np.argmin(distance[ahead_indices])]
+            # Return the closest point
+            return self.trajectory[closest_point_arg],closest_point_arg
         
     
     def get_constraint(self):
@@ -238,7 +247,7 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
     
     def get_error(self,target):
 
-        pose_error =  np.linalg.norm(self.pose[:2] - target[:2]) 
+        pose_error =  np.linalg.norm(self.pose - target) 
 
         return pose_error
         
@@ -249,10 +258,10 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.previous_pose = pose
         
         if pose_des is None:
-            self.q_des = np.random.randint([-1,-1,2],[2,2,3])
+            self.q_des = np.random.randint([-1,-1,1],[2,2,4])
 
             while np.all(self.q_des == pose):
-                self.q_des = np.random.randint([-1,-1,2],[2,2,3])
+                self.q_des = np.random.randint([-1,-1,1],[2,2,4])
         else:
             self.q_des = pose_des
 
@@ -271,18 +280,17 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
         self.reset_sim.send_request(pose_string)
         time.sleep(0.1)
 
-        self.lidar_subscriber.contact = False
-        pose_diff = self.get_subregion()
-        
-        lidar,self.check_contact = self.get_lidar_data()
-        # prp_state = pose_diff
-        prp_state = np.concatenate((pose_diff,lidar))
-        prp_state = prp_state.reshape(1,-1)
         self.current_time = 0
         self.const_broken = False
+        self.check_contact = False
         self.current_target = 1
         self.current_subtraj_time = 0
         self.max_time = max_time
+
+        pose_diff = self.get_subregion()
+        prp_state = pose_diff
+        prp_state = prp_state.reshape(1,-1)
+
         time.sleep(0.1)
 
         return prp_state
@@ -307,6 +315,19 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
     
         self.pose = self.get_uav_pose_client.send_request()
 
+
+    def get_intermediate_state(self):
+
+        lidar,_ = self.get_lidar_data()
+        heading = self.get_desired_heading()
+        pose_diff = self.q_des - self.pose
+        # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
+        prp_state = np.concatenate((heading,self.vel[:2],lidar))
+        # prp_state = lidar
+        prp_state = prp_state.reshape(1,-1)
+
+        return prp_state
+
     def get_lidar_data(self):
 
         data,contact = self.lidar_subscriber.get_state()
@@ -314,31 +335,14 @@ class BaseGazeboUAVVelTrajectoryTracking(gym.Env):
     
     def generate_sample_trajectory(self,q_start,q_des):
 
-        fraction = np.linspace(0,1,5)
-
+        fraction = np.linspace(0,1,10)
         points = q_start + fraction[:,np.newaxis]*(q_des - q_start)
 
         return np.round(points,3)
 
-    def get_safe_pose(self):
+    def get_desired_heading(self):
 
-        py = self.pose[1] - self.previous_pose[1]
-        px = self.pose[0] - self.previous_pose[0]
+        heading = self.q_des - self.pose
+        heading = heading/np.linalg.norm(heading)
 
-        if (py > 0 and px > 0) or (py < 0 and px < 0):
-
-            if py > 0:
-                self.previous_pose[0]+= 0.05
-                self.previous_pose[1]-= 0.05
-            else:
-                self.previous_pose[0]-= 0.05
-                self.previous_pose[1]+= 0.05
-
-        else:
-
-            if py > 0:
-                self.previous_pose[0]-= 0.05
-                self.previous_pose[1]-= 0.05
-            else:
-                self.previous_pose[0]+= 0.05
-                self.previous_pose[1]+= 0.05
+        return heading[:2]

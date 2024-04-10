@@ -7,12 +7,11 @@ class DDPG:
     '''
     DDPG Algorithm 
     '''
-    def __init__(self,args,policy,critic,replayBuff,exploration,vision):
+    def __init__(self,args,policy,critic,replayBuff,exploration):
 
         self.args = args # Argument values given by the user
         self.learning_step = 0 # counter to keep track of learning
         # Replay Buffer provided by the user
-        self.vision = vision
         self.replayBuff = replayBuff
         self.exploration = exploration
         self.policy = policy
@@ -22,11 +21,8 @@ class DDPG:
 
     def choose_action(self,state,stage="training"):
         
-        if self.vision is not None:
-            prp_state,rgb_state,depth_state = state
-            state = self.vision(torch.Tensor(depth_state),torch.Tensor(rgb_state),torch.Tensor(prp_state))
-        else:
-            state = torch.Tensor(state)
+        state = torch.Tensor(state)
+
         if stage == "training":
             action = self.PolicyNetwork(state).detach().numpy()
             action += self.noiseOBJ()
@@ -44,15 +40,8 @@ class DDPG:
             return
         state,action,reward,next_state,done = self.replay_buffer.shuffle()
 
-        if self.vision is not None:
-            prp_state,rgb_state,depth_state = state
-            next_prp_state,next_rgb_state, next_depth_state = next_state
-            state = self.vision(torch.Tensor(depth_state),torch.Tensor(rgb_state),torch.Tensor(prp_state))
-            next_state = self.vision(torch.Tensor(next_depth_state),torch.Tensor(next_rgb_state),torch.Tensor(next_prp_state))
-        else:
-            state = torch.Tensor(state)
-            next_state = torch.Tensor(next_state)
-        
+        state = torch.Tensor(state)
+        next_state = torch.Tensor(next_state)
         action  = torch.Tensor(action)
         reward = torch.Tensor(reward)
         next_state = torch.Tensor(next_state)
@@ -74,14 +63,6 @@ class DDPG:
         actor_loss.mean().backward()
         self.PolicyOptimizer.step()
 
-        if self.vision is not None and self.learning_step%self.args.vision_update == 0:
-            action_vision = self.PolicyNetwork(state)
-            critic_value_vision = self.Qnetwork(state,action_vision)
-            vision_loss = -critic_value_vision.mean()
-            self.VisionOptimizer.zero_grad()
-            vision_loss.mean().backward()
-            self.VisionOptimizer.step()
-
         if self.learning_step%self.args.target_update == 0:                
             soft_update(self.TargetPolicyNetwork,self.PolicyNetwork,self.args.tau)
             soft_update(self.TargetQNetwork,self.Qnetwork,self.args.tau)
@@ -102,9 +83,6 @@ class DDPG:
         self.Qnetwork = self.critic(self.args.input_shape,self.args.n_actions)
         self.QOptimizer = torch.optim.Adam(self.Qnetwork.parameters(),lr=self.args.critic_lr)
         self.TargetQNetwork = self.critic(self.args.input_shape,self.args.n_actions)
-
-        if self.vision is not None:
-            self.VisionOptimizer = torch.optim.Adam(self.vision.parameters(),lr=self.args.critic_lr)
 
         hard_update(self.TargetPolicyNetwork,self.PolicyNetwork)
         hard_update(self.TargetQNetwork,self.Qnetwork)

@@ -2,12 +2,14 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan,PointCloud2
 from gazebo_msgs.msg import ContactsState
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import TransformStamped
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
+import ros2_numpy
+import open3d as o3d
 
 class LidarSubscriber(Node):
 
@@ -36,6 +38,35 @@ class LidarSubscriber(Node):
     def lidar_callback(self, msg):
 
         self.lidar_range = msg.ranges
+
+class PCDSubscriber(Node):
+
+    def __init__(self):
+        super().__init__('pcd_subscriber')
+
+        self.pointcloud_data = None
+        self.distance = None
+        self.max_points = 200
+        self.pointcloud_subscription = self.create_subscription(PointCloud2,"/laser_controller/out",self.lidar_callback,10)
+        self.pointcloud_subscription  # prevent unused variable warning
+
+    def get_state(self):
+
+        if self.pointcloud_data is None or self.distance is None:
+            return np.zeros(shape=(self.max_points,3)),np.zeros(shape=(self.max_points)),False
+        
+        pcd_data = self.pointcloud_data
+        distance = self.distance
+        contact = False
+        if distance[distance<0.4].shape[0]>0:
+            contact = True
+
+        return pcd_data,distance,contact
+    
+    def lidar_callback(self, msg):
+
+        self.pointcloud_data = ros2_numpy.point_cloud2.pointcloud2_to_xyz_array(msg)
+        self.distance = np.linalg.norm(self.pointcloud_data[:,:2],axis=1)
 
 class CollisionSubscriber(Node):
 

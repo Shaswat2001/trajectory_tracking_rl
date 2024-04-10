@@ -10,15 +10,15 @@ import math
 import time
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
-
+import open3d as o3d
 from trajectory_tracking_rl.environment.utils.CltSrvClasses import UavClientAsync,UavVelClientAsync, ResetSimClientAsync, GetUavPoseClientAsync, PauseGazeboClient, UnPauseGazeboClient
-from trajectory_tracking_rl.environment.utils.PubSubClasses import StaticFramePublisher, LidarSubscriber, PathPublisherDDPG, PathPublisherSAC, PathPublisherSoftQ, PathPublisherTD3
+from trajectory_tracking_rl.environment.utils.PubSubClasses import StaticFramePublisher, LidarSubscriber, PCDSubscriber
 
-class BaseGazeboUAVVelObsEnvR2(gym.Env):
+class BaseGazeboUAVVelObsEnvPCD(gym.Env):
     
     def __init__(self): 
         
-        self.lidar_subscriber = LidarSubscriber()
+        self.pcd_subscriber = PCDSubscriber()
         self.uam_publisher = UavVelClientAsync()
         self.get_uav_pose_client = GetUavPoseClientAsync()
         self.pause_sim = PauseGazeboClient()
@@ -27,7 +27,7 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
 
         self.executor = rclpy.executors.MultiThreadedExecutor()
         self.executor.add_node(self.uam_publisher)
-        self.executor.add_node(self.lidar_subscriber)
+        self.executor.add_node(self.pcd_subscriber)
         self.executor.add_node(self.get_uav_pose_client)
         self.executor.add_node(self.pause_sim)
         self.executor.add_node(self.unpause_sim)
@@ -37,7 +37,7 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
         self.executor_thread.start()
 
         self.state = None
-        self.state_size = 364
+        self.state_size = 604
         self.action_max = np.array([0.1,0.1])
         
         self.q = None
@@ -73,7 +73,7 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
 
         self.get_uav_pose()
 
-        lidar,self.check_contact = self.get_lidar_data()
+        downsampled_pcd,pcd_data,pcd_range,self.check_contact = self.get_lidar_data()
         heading = self.get_desired_heading()
         # self.check_contact = self.collision_sub.get_collision_info()
 
@@ -83,7 +83,7 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
 
         self.const_broken = self.constraint_broken()
         self.pose_error = self.get_error()
-        reward,done = self.get_reward(lidar,heading)
+        reward,done = self.get_reward(pcd_data,pcd_range,heading)
         constraint = self.get_constraint()
         info = self.get_info(constraint)
 
@@ -100,13 +100,13 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
 
         pose_diff = self.q_des - self.pose
         # prp_state = lidar
-        prp_state = np.concatenate((heading,self.vel[:2],lidar))
+        prp_state = np.concatenate((heading,self.vel[:2],downsampled_pcd))
         prp_state = prp_state.reshape(1,-1)
         self.current_time += 1
 
         return prp_state, reward, done, info
 
-    def get_reward(self,lidar,heading):
+    def get_reward(self,pcd_data,pcd_range,heading):
         
         done = False
         pose_error = self.pose_error
@@ -115,12 +115,12 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
         if not self.const_broken:
             self.previous_pose = self.pose
 
-            collision_rwd,heading_reward = self.collision_reward(lidar,self.vel,heading)
-
-            if np.min(lidar) > 1:
-                reward = 3*np.min(lidar)
+            collision_rwd,heading_reward = self.collision_reward(pcd_data,self.vel,heading)
+            print(np.min(pcd_range))
+            if np.min(pcd_range) > 1:
+                reward = 2*np.min(pcd_range)
             else:
-                reward = -5*np.min(lidar)
+                reward = -5*np.min(pcd_range)
 
             reward += 2*distance
 
@@ -129,7 +129,7 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
             reward += 2*heading_reward
 
         else:
-            reward = -200
+            reward = -300
             done = True
 
         if self.current_time > self.max_time:
@@ -216,13 +216,12 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
         self.reset_sim.send_request(pose_string)
         time.sleep(0.1)
 
-        self.lidar_subscriber.contact = False
-        lidar,self.check_contact = self.get_lidar_data()
+        self.pcd_subscriber.contact = False
+        downsampled_pcd,_,_,self.check_contact = self.get_lidar_data()
         heading = self.get_desired_heading()
-        # print(f"the man pose : {self.man_pos}")
         # pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((heading,self.vel[:2],lidar))
+        prp_state = np.concatenate((heading,self.vel[:2],downsampled_pcd))
         # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
         self.current_time = 0
@@ -245,11 +244,11 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
         print(f"The target pose is : {self.q_des}")
 
         self.publish_simulator(self.pose)
-        lidar,self.check_contact = self.get_lidar_data()
+        downsampled_pcd,_,_,self.check_contact = self.get_lidar_data()
         # print(f"the man pose : {self.man_pos}")
         pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((pose_diff,lidar))
+        prp_state = np.concatenate((pose_diff,downsampled_pcd))
         prp_state = prp_state.reshape(1,-1)
         self.current_time = 0
         self.const_broken = False
@@ -259,9 +258,7 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
     
     def collision_reward(self,lidar,vel,heading):
 
-        theta_v = math.atan2(vel[1],vel[0])
-        if theta_v < 0:
-            theta_v += 2 * math.pi
+        theta_v = self.get_orientation(vel)
         i = 0
 
         if np.linalg.norm(vel) != 0:
@@ -271,30 +268,28 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
 
         heading_reward = np.dot(direction_heading[:2],heading)
     
-        start_theta = 0
         reward = 0
+
         while i < lidar.shape[0]:
+            distance = 10
+            start_theta = self.get_orientation(lidar[i])
+            final_theta = start_theta
 
-            if lidar[i] < 1:
-                start_theta = i*np.pi/180
+            distance = min(np.linalg.norm(lidar[i,:]),distance)
+
+            while abs(start_theta - final_theta) < 0.2 and i < lidar.shape[0]:
+                
+                distance = min(np.linalg.norm(lidar[i,:]),distance)
+                final_theta = self.get_orientation(lidar[i])
+
                 i += 1
-                while i < lidar.shape[0]:
-                    
-                    if lidar[i] < 1:
-                        i += 1
-                    else:
-                        break
 
-                final_theta = i*np.pi/180
-
-                if start_theta <= theta_v <= final_theta:
-                    reward = -10*np.linalg.norm(vel)
-                    return reward,heading_reward
-                else:
-                    value = min(abs(theta_v - start_theta),abs(theta_v - final_theta))
-                    reward = min(reward,value)
+            if start_theta <= theta_v <= final_theta and distance < 1:
+                reward = -10*np.linalg.norm(vel)
+                return reward,heading_reward
             else:
-                i += 1
+                value = min(abs(theta_v - start_theta),abs(theta_v - final_theta))
+                reward = max(reward,value)
 
         return reward,heading_reward
     
@@ -327,5 +322,28 @@ class BaseGazeboUAVVelObsEnvR2(gym.Env):
 
     def get_lidar_data(self):
 
-        data,contact = self.lidar_subscriber.get_state()
-        return data,contact
+        data,distance,contact = self.pcd_subscriber.get_state()
+        max_points = self.pcd_subscriber.max_points
+
+        if np.all(data == np.zeros((max_points,3))):
+            return data.flatten(),data,contact
+        
+        downsampled_pcd = np.zeros((max_points,3))
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(data)
+        pcd = pcd.voxel_down_sample(0.08)
+
+        xyz_load = np.asarray(pcd.points)
+        
+        downsampled_pcd[:xyz_load.shape[0],:] = xyz_load[:min(xyz_load.shape[0],max_points),:]
+        downsampled_pcd[xyz_load.shape[0]:,:] = xyz_load[-1,:]
+        
+        return downsampled_pcd.flatten(),data,distance,contact
+    
+    def get_orientation(self,point):
+
+        theta = math.atan2(point[1],point[0])
+        if theta < 0:
+            theta += 2 * math.pi
+
+        return theta

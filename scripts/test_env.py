@@ -23,13 +23,14 @@ from trajectory_tracking_rl.environment.BaseGazeboUAVVelEnv import BaseGazeboUAV
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvSimp import BaseGazeboUAVVelObsEnvSimp
 from trajectory_tracking_rl.environment.BaseGazeboUAVTrajectoryTracking import BaseGazeboUAVTrajectoryTracking
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelTrajectoryTracking import BaseGazeboUAVVelTrajectoryTracking
+from trajectory_tracking_rl.environment.BaseGazeboUAVVel3DTrajectoryTracking import BaseGazeboUAVVel3DTrajectoryTracking
 from trajectory_tracking_rl.teacher import TeacherController
 
 def build_parse():
 
     parser = argparse.ArgumentParser(description="RL Algorithm Variables")
 
-    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_tracking",help="Name of OPEN AI environment")
+    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_tracking_3d",help="Name of OPEN AI environment")
     parser.add_argument("input_shape",nargs="?",type=int,default=[],help="Shape of environment state")
     parser.add_argument("n_actions",nargs="?",type=int,default=[],help="shape of environment action")
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
@@ -102,14 +103,14 @@ def build_parse():
 def train(args,env,agent,teacher):
 
     velocity_traj = []
-    s = env.reset(pose_des = np.array([1,1,2]),max_time = 20)
+    s = env.reset(pose_des = np.array([-1,-1,3]),max_time = 25)
     agent.load(args.Environment)
     start_time = time.time()
     # for _ in range(200):
     while True:
         # s = s.reshape(1,s.shape[0])
         start_time = time.time()
-        action = agent.choose_action(s,"training")
+        action = agent.choose_action(s,"testing")
         print(f"Time in seconds : {time.time() - start_time}")
         next_state,rwd,done,info = env.step(action)
         print(env.pose)
@@ -146,13 +147,9 @@ if __name__=="__main__":
         env = BaseGazeboUAVTrajectoryTracking()
     elif "uam_vel_gazebo_tracking" == args.Environment:
         env = BaseGazeboUAVVelTrajectoryTracking()
+    elif "uam_vel_gazebo_tracking_3d" == args.Environment:
+        env = BaseGazeboUAVVel3DTrajectoryTracking()
 
-    if args.enable_vision:
-        vision_model = FeatureExtractor(None,None,12)
-        replay_buffer = VisionReplayBuffer
-    else:
-        vision_model = None
-        replay_buffer = ReplayBuffer
     
     args.state_size = env.state_size
     args.input_shape = env.state_size
@@ -167,7 +164,7 @@ if __name__=="__main__":
     #     args.Algorithm = i
 
     if args.Algorithm == "DDPG":
-        agent = DDPG.DDPG(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = replay_buffer,exploration = OUActionNoise,vision = vision_model)
+        agent = DDPG.DDPG(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
     elif args.Algorithm == "TD3":
         agent = TD3.TD3(args = args,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
     elif args.Algorithm == "SAC":
