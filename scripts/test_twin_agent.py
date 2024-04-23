@@ -25,6 +25,8 @@ from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvSimp import BaseGa
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvR2 import BaseGazeboUAVVelObsEnvR2
 from trajectory_tracking_rl.environment.BaseGazeboUAVTrajectoryTracking import BaseGazeboUAVTrajectoryTracking
 from trajectory_tracking_rl.environment.BaseGazeboUAVVelTrajectoryTracking import BaseGazeboUAVVelTrajectoryTracking
+from trajectory_tracking_rl.environment.BaseGazeboUAVVel3DTrajectoryTracking import BaseGazeboUAVVel3DTrajectoryTracking
+from trajectory_tracking_rl.environment.BaseGazeboUAVVelObsEnvPCD import BaseGazeboUAVVelObsEnvPCD
 
 from trajectory_tracking_rl.teacher import TeacherController
 
@@ -105,47 +107,35 @@ def build_parse():
 def train(args1,args2,env1,env2,agent1,agent2,teacher):
 
     velocity_traj = []
-    # FOUR OBS - [7,8,2]
-    # FIVE OBS - [7,-1,2]
-    # SIX OBS - [2,-8,2]
-    # SEVEN OBS - [9, 9, 2]
     s = env1.reset(pose = np.array([-5,-5,2]), pose_des = np.array([5,5,2]),max_time = 400)
-    action = np.zeros((2))
-    # s = env.reset_test(pose_des = np.array([7,7,2]),max_time = 185,alg = args.Algorithm)
-    agent1.load("uam_vel_gazebo_tracking")
-    agent2.load("uam_vel_gazebo_obs_r2")
+    action = np.zeros((3))
+
+    agent1.load("uam_vel_gazebo_tracking_3d")
+    agent2.load("uam_vel_gazebo_obs_pcd")
     start_time = time.time()  
     obs_switch = 0
     # for _ in range(200):
     while True:
         # s = s.reshape(1,s.shape[0])
         start_time = time.time()
-        if len(action.shape) == 2:
-            action = action[0]
 
-        if (np.min(env1.get_lidar_data()[0]) < 1 or env2.collision_reward(env1.get_lidar_data()[0],action,env1.get_desired_heading())[0] < 0):
+        action = agent1.choose_action(s,"testing")
+
+        if (np.min(env1.distance) < 1 and env2.collision_switch(env1.lidar_data,action[0])):
             s = env1.get_intermediate_state()
             print("MAKING SWITCH")
             action = agent2.choose_action(s,"testing")
+            action = np.append(action,0)
 
-            action = action[:2]
-            # obs_switch += 1
-            # if obs_switch > 100:
-            #     obs_switch = 0
-        elif obs_switch == 0:
-            action = agent1.choose_action(s,"testing")
-        
         print(f"Time in seconds : {time.time() - start_time}")
 
         next_state,rwd,done,info = env1.step(action)
         velocity_traj.append(list(env1.pose))
-        print()
-        # print(next_state)
+        # print(next_state)   
         if done:
             break
             
         s = next_state
-        time.sleep(0.07)
 
     velocity_traj = np.array(velocity_traj)
     plt.plot(velocity_traj[:,0],velocity_traj[:,1])
@@ -162,11 +152,8 @@ if __name__=="__main__":
     args1 = build_parse()
     args2 = build_parse()
 
-    env1 = BaseGazeboUAVVelTrajectoryTracking()
-    env2 = BaseGazeboUAVVelObsEnvR2()
-
-    vision_model = None
-    replay_buffer = ReplayBuffer
+    env1 = BaseGazeboUAVVel3DTrajectoryTracking()
+    env2 = BaseGazeboUAVVelObsEnvPCD()
     
     args1.state_size = env1.state_size
     args1.input_shape = env1.state_size
@@ -185,8 +172,8 @@ if __name__=="__main__":
     args2.safe_min_action = -env2.safe_action_max
 
 
-    agent1 = DDPG.DDPG(args = args1,policy = PolicyNetwork,critic = QNetwork,replayBuff = replay_buffer,exploration = OUActionNoise,vision = vision_model)
-    agent2 = DDPG.DDPG(args = args2,policy = PolicyNetwork,critic = QNetwork,replayBuff = replay_buffer,exploration = OUActionNoise,vision = vision_model)
+    agent1 = DDPG.DDPG(args = args1,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
+    agent2 = DDPG.DDPG(args = args2,policy = PolicyNetwork,critic = QNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
 
     teacher = None
 

@@ -8,15 +8,16 @@ import numpy as np
 import threading
 import time
 import math
+import open3d as o3d
 
 from trajectory_tracking_rl.environment.utils.CltSrvClasses import UavClientAsync,UavVelClientAsync, ResetSimClientAsync, GetUavPoseClientAsync, PauseGazeboClient, UnPauseGazeboClient
-from trajectory_tracking_rl.environment.utils.PubSubClasses import StaticFramePublisher, LidarSubscriber, PathPublisherDDPG, PathPublisherSAC, PathPublisherSoftQ, PathPublisherTD3
+from trajectory_tracking_rl.environment.utils.PubSubClasses import StaticFramePublisher, LidarSubscriber, PCDSubscriber
 
 class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
     
     def __init__(self): 
         
-        self.lidar_subscriber = LidarSubscriber()
+        self.pcd_subscriber = PCDSubscriber()
         self.uam_publisher = UavVelClientAsync()
         self.get_uav_pose_client = GetUavPoseClientAsync()
         self.pause_sim = PauseGazeboClient()
@@ -25,7 +26,7 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
 
         self.executor = rclpy.executors.MultiThreadedExecutor()
         self.executor.add_node(self.uam_publisher)
-        self.executor.add_node(self.lidar_subscriber)
+        self.executor.add_node(self.pcd_subscriber)
         self.executor.add_node(self.get_uav_pose_client)
         self.executor.add_node(self.pause_sim)
         self.executor.add_node(self.unpause_sim)
@@ -42,7 +43,7 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         self.q_des = None
         self.check_contact = False
 
-        self.max_points = 9
+        self.max_points = 99
         self.current_target = 1
         self.max_time = 25
         self.max_trajectory_step = 6
@@ -82,6 +83,8 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         # else:
         #     self.current_target = current_target
         # current_target_pose = self.trajectory[self.current_target]
+
+        _,self.lidar_data,self.distance,_ = self.get_lidar_data()
         
         self.const_broken = self.constraint_broken()
         self.pose_error = self.get_error(current_target_pose)
@@ -160,13 +163,13 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
             self.current_target+=1
             self.current_subtraj_time = 0
         
-        # if self.current_target > self.max_points or self.current_time > self.max_time:
-        #     done = True
-        #     reward -= 2
-
-        if self.current_target > self.max_points:
+        if self.current_target > self.max_points or self.current_time > self.max_time:
             done = True
             reward -= 2
+
+        # if self.current_target > self.max_points:
+        #     done = True
+        #     reward -= 2
 
         return reward,done
     
@@ -258,10 +261,10 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         self.previous_pose = pose
         
         if pose_des is None:
-            self.q_des = np.random.randint([-1,-1,1],[2,2,4])
+            self.q_des = np.random.randint([-5,-5,1],[6,6,4])
 
             while np.all(self.q_des == pose):
-                self.q_des = np.random.randint([-1,-1,1],[2,2,4])
+                self.q_des = np.random.randint([-5,-5,1],[6,6,4])
         else:
             self.q_des = pose_des
 
@@ -269,6 +272,8 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         # trajectory2 = self.generate_sample_trajectory(np.array([1,1,2]),np.array([2,1,2]))
         # self.trajectory = np.concatenate((trajectory1[:-1,:],trajectory2))
         self.trajectory = self.generate_sample_trajectory(self.pose,self.q_des)
+
+        _,self.lidar_data,self.distance,_ = self.get_lidar_data()
 
         print(f"The target pose is : {self.q_des}")
 
@@ -315,14 +320,13 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
     
         self.pose = self.get_uav_pose_client.send_request()
 
-
     def get_intermediate_state(self):
 
-        lidar,_ = self.get_lidar_data()
+        lidar,_,_,_ = self.get_lidar_data()
         heading = self.get_desired_heading()
         pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((heading,self.vel[:2],lidar))
+        prp_state = np.concatenate((pose_diff,self.vel[:2],lidar))
         # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
 
@@ -330,12 +334,27 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
 
     def get_lidar_data(self):
 
-        data,contact = self.lidar_subscriber.get_state()
-        return data,contact
+        data,distance,contact = self.pcd_subscriber.get_state()
+        max_points = self.pcd_subscriber.max_points
+
+        if np.all(data == np.zeros((max_points,3))):
+            return data.flatten(),data,distance,contact
+        
+        downsampled_pcd = np.zeros((max_points,3))
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(data)
+        pcd = pcd.voxel_down_sample(0.08)
+
+        xyz_load = np.asarray(pcd.points)
+        
+        downsampled_pcd[:xyz_load.shape[0],:] = xyz_load[:min(xyz_load.shape[0],max_points),:]
+        downsampled_pcd[xyz_load.shape[0]:,:] = xyz_load[-1,:]
+        
+        return downsampled_pcd.flatten(),data,distance,contact
     
     def generate_sample_trajectory(self,q_start,q_des):
 
-        fraction = np.linspace(0,1,10)
+        fraction = np.linspace(0,1,self.max_points+1)
         points = q_start + fraction[:,np.newaxis]*(q_des - q_start)
 
         return np.round(points,3)

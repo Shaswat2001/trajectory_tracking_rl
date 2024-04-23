@@ -115,6 +115,7 @@ def train(args,env,agent,teacher):
     
     ep_len = 0
     constraint_broke = 0
+    # agent.load(args.Environment)
     for i in range(args.n_episodes):
         if teacher is not None:
             teacher.generate_env_param()

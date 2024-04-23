@@ -116,17 +116,17 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
             self.previous_pose = self.pose
 
             collision_rwd,heading_reward = self.collision_reward(pcd_data,self.vel,heading)
-            print(np.min(pcd_range))
-            if np.min(pcd_range) > 1:
+
+            if np.min(pcd_range) > 1.5:
                 reward = 2*np.min(pcd_range)
             else:
-                reward = -5*np.min(pcd_range)
+                reward = -5*(4 - np.min(pcd_range))
 
             reward += 2*distance
 
             reward += 4*collision_rwd
 
-            reward += 2*heading_reward
+            reward += 3*heading_reward
 
         else:
             reward = -300
@@ -189,12 +189,14 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
         return pose_error
         
-    def reset(self,pose = np.array([0,-2,2]),pose_des = None,max_time = 110,publish_path = False):
+    def reset(self,pose = np.array([0,-2,2]),pose_des = None,max_time = 30,publish_path = False):
 
         #initial conditions
         self.pose = pose
         self.starting_pose = pose
-        self.vel = np.array([0,0,0])
+
+        self.vel = np.random.uniform(low=[-1.5,-1.5,0],high=[1.5,1.5,0])
+        # self.vel = np.array([0,0,0])
         self.previous_pose = pose
         # self.qdot = np.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01]) #initial velocity [x; y; z] in inertial frame - m/s
         
@@ -219,6 +221,16 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         self.pcd_subscriber.contact = False
         downsampled_pcd,_,_,self.check_contact = self.get_lidar_data()
         heading = self.get_desired_heading()
+
+        for i in range(2):
+
+            if heading[i] < 0:
+                self.vel[i] = -abs(self.vel[i])
+            else:
+                self.vel[i] = abs(self.vel[i])
+
+        print(f"The target heading is : {heading}")
+        print(f"The velocity is : {self.vel}")
         # pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
         prp_state = np.concatenate((heading,self.vel[:2],downsampled_pcd))
@@ -293,6 +305,26 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
         return reward,heading_reward
     
+    def collision_switch(self,lidar,vel):
+
+        theta_v = self.get_orientation(vel)
+        i = 0
+    
+        while i < lidar.shape[0]:
+            start_theta = self.get_orientation(lidar[i])
+            final_theta = start_theta
+
+            while abs(start_theta - final_theta) < 0.2 and i < lidar.shape[0]:
+                
+                final_theta = self.get_orientation(lidar[i])
+
+                i += 1
+
+            if start_theta <= theta_v <= final_theta:
+                return True
+            
+        return False
+    
     def publish_simulator(self,q):
     
         uav_vel = list(q)[0:3]
@@ -326,7 +358,7 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         max_points = self.pcd_subscriber.max_points
 
         if np.all(data == np.zeros((max_points,3))):
-            return data.flatten(),data,contact
+            return data.flatten(),data,distance,contact
         
         downsampled_pcd = np.zeros((max_points,3))
         pcd = o3d.geometry.PointCloud()
