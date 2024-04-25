@@ -58,7 +58,7 @@ class PCDSubscriber(Node):
         pcd_data = self.pointcloud_data
         distance = self.distance
         contact = False
-        if distance[distance<0.4].shape[0]>0:
+        if distance[distance<0.25].shape[0]>0:
             contact = True
 
         return pcd_data,distance,contact

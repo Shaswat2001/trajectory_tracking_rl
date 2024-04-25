@@ -37,8 +37,8 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         self.executor_thread.start()
 
         self.state = None
-        self.state_size = 604
-        self.action_max = np.array([0.1,0.1])
+        self.state_size = 606
+        self.action_max = np.array([0.1,0.1,0.1])
         
         self.q = None
         self.q_des = None
@@ -67,7 +67,7 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
     def step(self, action):
         
         action = action[0]
-        self.vel[:2] = self.vel[:2] + action[:2]
+        self.vel[:3] = self.vel[:3] + action[:3]
         self.vel = np.clip(self.vel,self.min_q_bound,self.max_q_bound)
         self.publish_simulator(self.vel)
 
@@ -100,7 +100,7 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
         pose_diff = self.q_des - self.pose
         # prp_state = lidar
-        prp_state = np.concatenate((heading,self.vel[:2],downsampled_pcd))
+        prp_state = np.concatenate((pose_diff,self.vel,downsampled_pcd))
         prp_state = prp_state.reshape(1,-1)
         self.current_time += 1
 
@@ -117,16 +117,22 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
             collision_rwd,heading_reward = self.collision_reward(pcd_data,self.vel,heading)
 
-            if np.min(pcd_range) > 1.5:
-                reward = 2*np.min(pcd_range)
+            if pose_error < 0.1:
+                reward = 10
+                done = True
             else:
-                reward = -5*(4 - np.min(pcd_range))
+                # if np.min(pcd_range) > 0.5:
+                #     reward = 2*np.min(pcd_range)
+                # else:
+                #     reward = -5*(1 - np.min(pcd_range))
 
-            reward += 2*distance
+                # reward += 2*distance
 
-            reward += 4*collision_rwd
+                # reward += 4*collision_rwd
 
-            reward += 3*heading_reward
+                reward = 5*np.min(pcd_range) - 15*pose_error
+
+                # reward -= 3*pose_error
 
         else:
             reward = -300
@@ -189,7 +195,7 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
         return pose_error
         
-    def reset(self,pose = np.array([0,-2,2]),pose_des = None,max_time = 30,publish_path = False):
+    def reset(self,pose = np.array([0,0,2]),pose_des = None,max_time = 20,publish_path = False):
 
         #initial conditions
         self.pose = pose
@@ -201,12 +207,19 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         # self.qdot = np.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01]) #initial velocity [x; y; z] in inertial frame - m/s
         
         if pose_des is None:
-            self.q_des = np.random.randint([-5,-5,2],[6,6,3])
+            self.q_des = np.random.randint([-1,-1,1],[2,2,4])
 
             while np.all(self.q_des == pose):
-                self.q_des = np.random.randint([-5,-5,2],[6,6,3])
+                self.q_des = np.random.randint([-1,-1,1],[2,2,4])
         else:
             self.q_des = pose_des
+
+        for i in range(3):
+
+            if self.q_des[i] < 0:
+                self.vel[i] = -abs(self.vel[i])
+            else:
+                self.vel[i] = abs(self.vel[i])
 
         # print(f"The target heading is : {self.angle}")
 
@@ -222,18 +235,11 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         downsampled_pcd,_,_,self.check_contact = self.get_lidar_data()
         heading = self.get_desired_heading()
 
-        for i in range(2):
-
-            if heading[i] < 0:
-                self.vel[i] = -abs(self.vel[i])
-            else:
-                self.vel[i] = abs(self.vel[i])
-
         print(f"The target heading is : {heading}")
         print(f"The velocity is : {self.vel}")
-        # pose_diff = self.q_des - self.pose
+        pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((heading,self.vel[:2],downsampled_pcd))
+        prp_state = np.concatenate((pose_diff,self.vel,downsampled_pcd))
         # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
         self.current_time = 0
@@ -365,7 +371,13 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         pcd.points = o3d.utility.Vector3dVector(data)
         pcd = pcd.voxel_down_sample(0.08)
 
+        if distance.shape[0] == 0:
+            distance = np.full(shape=(max_points),fill_value=1.0)
+
         xyz_load = np.asarray(pcd.points)
+
+        if xyz_load.shape[0] == 0:            
+            return downsampled_pcd.flatten(),data,distance,contact
         
         downsampled_pcd[:xyz_load.shape[0],:] = xyz_load[:min(xyz_load.shape[0],max_points),:]
         downsampled_pcd[xyz_load.shape[0]:,:] = xyz_load[-1,:]
