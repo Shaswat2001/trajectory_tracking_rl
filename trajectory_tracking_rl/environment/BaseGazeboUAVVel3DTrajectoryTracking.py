@@ -43,7 +43,7 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         self.q_des = None
         self.check_contact = False
 
-        self.max_points = 99
+        self.max_points = 9
         self.current_target = 1
         self.max_time = 25
         self.max_trajectory_step = 6
@@ -74,8 +74,8 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
 
         self.get_uav_pose()
 
-        # current_target_pose,self.current_target = self.get_closest_point()
-        current_target_pose = self.trajectory[self.current_target]
+        current_target_pose,self.current_target = self.get_closest_point()
+        # current_target_pose = self.trajectory[self.current_target]
         # if current_target < self.current_target and self.current_target > 6:
         #     self.current_target += 1
         #     self.current_target = min(29,self.current_target)
@@ -157,17 +157,18 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
             reward = -300
             # done = True
 
-        if self.current_subtraj_time == 3:
-            # print(f"Maximum error : {pose_error}")
-            # print(f"Maximum deviation : {deviation}")
-            self.current_target+=1
-            self.current_subtraj_time = 0
+        # if self.current_subtraj_time == 3:
+        #     # print(f"Maximum error : {pose_error}")
+        #     # print(f"Maximum deviation : {deviation}")
+        #     self.current_target+=1
+        #     self.current_subtraj_time = 0
         
         if self.current_target > self.max_points or self.current_time > self.max_time:
             done = True
             reward -= 2
 
         # if self.current_target > self.max_points:
+        #     # print("HI")
         #     done = True
         #     reward -= 2
 
@@ -256,28 +257,30 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         
     def reset(self,pose = np.array([0,0,2]),pose_des = None,max_time = 25):
 
+        # self.pose = np.round(np.random.uniform(low = -0.2,high=0.2,size=(2,)),1)
+        # self.pose = np.append(self.pose,2.0)
         self.pose = pose
         self.vel = np.array([0,0,0])
-        self.previous_pose = pose
+        self.previous_pose = self.pose
         
         if pose_des is None:
-            self.q_des = np.random.randint([-5,-5,1],[6,6,4])
+            self.q_des = np.random.randint([-1,-1,1],[2,2,4])
 
             while np.all(self.q_des == pose):
-                self.q_des = np.random.randint([-5,-5,1],[6,6,4])
+                self.q_des = np.random.randint([-1,-1,1],[2,2,4])
         else:
             self.q_des = pose_des
 
         # trajectory1 = self.generate_sample_trajectory(np.array([0,0,2]),np.array([1,1,2]))
         # trajectory2 = self.generate_sample_trajectory(np.array([1,1,2]),np.array([2,1,2]))
         # self.trajectory = np.concatenate((trajectory1[:-1,:],trajectory2))
-        self.trajectory = self.generate_sample_trajectory(self.pose,self.q_des)
+        self.trajectory = self.generate_sample_trajectory(pose,self.q_des)
 
         _,self.lidar_data,self.distance,_ = self.get_lidar_data()
 
         print(f"The target pose is : {self.q_des}")
 
-        pose_string = list(pose)[0:3]
+        pose_string = list(self.pose)[0:3]
         pose_string += [0,0,0]
         pose_string = f"{pose_string}"[1:-1]
 
@@ -326,7 +329,7 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         heading = self.get_desired_heading()
         pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((pose_diff,self.vel[:2],lidar))
+        prp_state = np.concatenate((pose_diff,lidar))
         # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
 
@@ -345,7 +348,13 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         pcd.points = o3d.utility.Vector3dVector(data)
         pcd = pcd.voxel_down_sample(0.08)
 
+        if distance.shape[0] == 0:
+            distance = np.full(shape=(max_points),fill_value=1.0)
+
         xyz_load = np.asarray(pcd.points)
+
+        if xyz_load.shape[0] == 0:            
+            return downsampled_pcd.flatten(),data,distance,contact
         
         downsampled_pcd[:xyz_load.shape[0],:] = xyz_load[:min(xyz_load.shape[0],max_points),:]
         downsampled_pcd[xyz_load.shape[0]:,:] = xyz_load[-1,:]

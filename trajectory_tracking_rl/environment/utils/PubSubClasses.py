@@ -53,7 +53,7 @@ class PCDSubscriber(Node):
     def get_state(self):
 
         if self.pointcloud_data is None or self.distance is None:
-            return np.zeros(shape=(self.max_points,3)),np.zeros(shape=(self.max_points)),False
+            return np.zeros(shape=(self.max_points,3)),np.ones(shape=(self.max_points)),False
         
         pcd_data = self.pointcloud_data
         distance = self.distance

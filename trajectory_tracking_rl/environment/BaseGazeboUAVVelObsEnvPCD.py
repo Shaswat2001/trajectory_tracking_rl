@@ -37,7 +37,7 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         self.executor_thread.start()
 
         self.state = None
-        self.state_size = 606
+        self.state_size = 603
         self.action_max = np.array([0.1,0.1,0.1])
         
         self.q = None
@@ -89,18 +89,13 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
         if done:
 
-            # theta_v = math.atan2(self.vel[1],self.vel[0])
-            # if theta_v < 0:
-            #     theta_v += 2 * math.pi
-            # i = 0
-        
             print(f"The constraint is broken : {self.const_broken}")
             print(f"The end pose of UAV is : {self.pose[:3]}")
             # print(f"The final heading of UAV is : {theta_v}")
 
         pose_diff = self.q_des - self.pose
         # prp_state = lidar
-        prp_state = np.concatenate((pose_diff,self.vel,downsampled_pcd))
+        prp_state = np.concatenate((pose_diff,downsampled_pcd))
         prp_state = prp_state.reshape(1,-1)
         self.current_time += 1
 
@@ -128,9 +123,9 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
                 # reward += 2*distance
 
-                # reward += 4*collision_rwd
+                # reward += 3*collision_rwd
 
-                reward = 5*np.min(pcd_range) - 15*pose_error
+                reward = 3*collision_rwd + 2*np.min(pcd_range) - 10*pose_error
 
                 # reward -= 3*pose_error
 
@@ -201,8 +196,8 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         self.pose = pose
         self.starting_pose = pose
 
-        self.vel = np.random.uniform(low=[-1.5,-1.5,0],high=[1.5,1.5,0])
-        # self.vel = np.array([0,0,0])
+        # self.vel = np.random.uniform(low=[-1.5,-1.5,0],high=[1.5,1.5,0])
+        self.vel = np.array([0,0,0])
         self.previous_pose = pose
         # self.qdot = np.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01]) #initial velocity [x; y; z] in inertial frame - m/s
         
@@ -214,12 +209,12 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         else:
             self.q_des = pose_des
 
-        for i in range(3):
+        # for i in range(3):
 
-            if self.q_des[i] < 0:
-                self.vel[i] = -abs(self.vel[i])
-            else:
-                self.vel[i] = abs(self.vel[i])
+        #     if self.q_des[i] < 0:
+        #         self.vel[i] = -abs(self.vel[i])
+        #     else:
+        #         self.vel[i] = abs(self.vel[i])
 
         # print(f"The target heading is : {self.angle}")
 
@@ -235,11 +230,12 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         downsampled_pcd,_,_,self.check_contact = self.get_lidar_data()
         heading = self.get_desired_heading()
 
-        print(f"The target heading is : {heading}")
+        print(f"The target pose is : {self.q_des}")
+        # print(f"The target heading is : {heading}")
         print(f"The velocity is : {self.vel}")
         pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((pose_diff,self.vel,downsampled_pcd))
+        prp_state = np.concatenate((pose_diff,downsampled_pcd))
         # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
         self.current_time = 0
@@ -250,7 +246,6 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         return prp_state
     
     def reset_test(self,q_des,max_time,algorithm):
-
 
         self.pose = np.array([-6.0,-6.0,1])
         self.vel = np.array([0,0,0])

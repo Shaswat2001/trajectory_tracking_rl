@@ -32,7 +32,7 @@ def build_parse():
 
     parser = argparse.ArgumentParser(description="RL Algorithm Variables")
 
-    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_obs_pcd",help="Name of OPEN AI environment")
+    parser.add_argument("Environment",nargs="?",type=str,default="uam_vel_gazebo_tracking_3d",help="Name of OPEN AI environment")
     parser.add_argument("input_shape",nargs="?",type=int,default=[],help="Shape of environment state")
     parser.add_argument("n_actions",nargs="?",type=int,default=[],help="shape of environment action")
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
@@ -115,7 +115,7 @@ def train(args,env,agent,teacher):
     
     ep_len = 0
     constraint_broke = 0
-    # agent.load(args.Environment)
+    agent.load(args.Environment)
     for i in range(args.n_episodes):
         if teacher is not None:
             teacher.generate_env_param()

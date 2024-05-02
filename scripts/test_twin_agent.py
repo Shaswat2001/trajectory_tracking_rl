@@ -107,7 +107,7 @@ def build_parse():
 def train(args1,args2,env1,env2,agent1,agent2,teacher):
 
     velocity_traj = []
-    s = env1.reset(pose = np.array([-5,-5,2]), pose_des = np.array([5,5,2]),max_time = 400)
+    s = env1.reset(pose = np.array([0,0,2]), pose_des = np.array([1,1,2]),max_time = 40)
     action = np.zeros((3))
 
     agent1.load("uam_vel_gazebo_tracking_3d")
