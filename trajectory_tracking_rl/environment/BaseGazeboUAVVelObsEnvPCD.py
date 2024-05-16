@@ -89,11 +89,6 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         # print(downsampled_pcd)
         if done:
 
-            # theta_v = math.atan2(self.vel[1],self.vel[0])
-            # if theta_v < 0:
-            #     theta_v += 2 * math.pi
-            # i = 0
-        
             print(f"The constraint is broken : {self.const_broken}")
             print(f"The end pose of UAV is : {self.pose[:3]}")
             # print(f"The final heading of UAV is : {theta_v}")
@@ -128,9 +123,9 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
 
                 # reward += 2*distance
 
-                # reward += 4*collision_rwd
+                # reward += 3*collision_rwd
 
-                reward = 5*np.min(pcd_range) - 15*pose_error
+                reward = 3*collision_rwd + 2*np.min(pcd_range) - 10*pose_error
 
                 # reward -= 3*pose_error
 
@@ -248,7 +243,6 @@ class BaseGazeboUAVVelObsEnvPCD(gym.Env):
         return prp_state
     
     def reset_test(self,q_des,max_time,algorithm):
-
 
         self.pose = np.array([-6.0,-6.0,1])
         self.vel = np.array([0,0,0])
