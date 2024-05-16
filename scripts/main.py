@@ -47,7 +47,7 @@ def build_parse():
 
     parser.add_argument("mem_size",nargs="?",type=int,default=100000,help="Size of Replay Buffer")
     parser.add_argument("batch_size",nargs="?",type=int,default=64,help="Batch Size used during training")
-    parser.add_argument("n_episodes",nargs="?",type=int,default=50000,help="Total number of episodes to train the agent")
+    parser.add_argument("n_episodes",nargs="?",type=int,default=100000,help="Total number of episodes to train the agent")
     parser.add_argument("n_batches",nargs="?",type=int,default=10,help="Total number of times the RL needs to be replicated")
     parser.add_argument("target_update",nargs="?",type=int,default=2,help="Iterations to update the target network")
     parser.add_argument("vision_update",nargs="?",type=int,default=5,help="Iterations to update the vision network")
@@ -115,7 +115,7 @@ def train(args,env,agent,teacher):
     
     ep_len = 0
     constraint_broke = 0
-    # agent.load(args.Environment)
+    agent.load(args.Environment)
     for i in range(args.n_episodes):
         if teacher is not None:
             teacher.generate_env_param()

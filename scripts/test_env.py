@@ -104,7 +104,7 @@ def build_parse():
 def train(args,env,agent,teacher):
 
     velocity_traj = []
-    s = env.reset(pose=np.array([0,0,2]),pose_des = np.array([1,1,2]),max_time = 30)
+    s = env.reset(pose=np.array([0,0,2]),pose_des = np.array([-2,-2,2]),max_time = 45)
     agent.load(args.Environment)
     start_time = time.time()
     # for _ in range(200):

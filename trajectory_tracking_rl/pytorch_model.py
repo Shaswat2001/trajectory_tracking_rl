@@ -8,13 +8,15 @@ def init_weights(m):
     if type(m) == nn.Linear:
         m.weight.data.fill_(0.01)
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class PolicyNetwork(nn.Module):
 
     def __init__(self,input_shape,n_action,bound):
         super(PolicyNetwork,self).__init__()
 
 
-        self.bound = torch.tensor(bound,dtype=torch.float32)
+        self.bound = torch.tensor(bound,dtype=torch.float32).to(device)
         self.actionNet =  nn.Sequential(
             nn.Linear(input_shape,256),
             nn.ReLU(),
@@ -32,6 +34,7 @@ class PolicyNetwork(nn.Module):
 
         return action
 
+    
 class CEM(nn.Module):
 
     def __init__(self,n_action,init_mean = 0,init_std = 1,no_samples = 64):

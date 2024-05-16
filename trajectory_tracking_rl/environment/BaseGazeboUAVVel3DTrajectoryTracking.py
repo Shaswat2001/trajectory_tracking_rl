@@ -43,16 +43,16 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         self.q_des = None
         self.check_contact = False
 
-        self.max_points = 99
+        self.max_points = 49
         self.current_target = 1
         self.max_time = 25
-        self.max_trajectory_step = 6
+        self.max_trajectory_step = 12
         self.dt = 0.04
         self.current_time = 0
         self.current_subtraj_time = 0
 
-        self.max_q_bound = np.array([1.5,1.5,1.5])
-        self.min_q_bound = np.array([-1.5,-1.5,-1.5])
+        self.max_q_bound = np.array([0.7,0.7,0.7])
+        self.min_q_bound = np.array([-0.7,-0.7,-0.7])
 
         self.max_q_safety = np.array([8,8,8])
         self.min_q_safety = np.array([-8,-8,2])
@@ -157,7 +157,7 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
             reward = -300
             # done = True
 
-        if self.current_subtraj_time == 3:
+        if self.current_subtraj_time == 6:
             # print(f"Maximum error : {pose_error}")
             # print(f"Maximum deviation : {deviation}")
             self.current_target+=1
@@ -326,10 +326,11 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         heading = self.get_desired_heading()
         pose_diff = self.q_des - self.pose
         # pose_diff = np.clip(self.q_des - self.man_pos,np.array([-1,-1,-1]),np.array([1,1,1]))
-        prp_state = np.concatenate((pose_diff,self.vel[:2],lidar))
+        prp_state = np.concatenate((self.vel,pose_diff,lidar))
+        # print(lidar)
         # prp_state = lidar
         prp_state = prp_state.reshape(1,-1)
-
+        print(prp_state.shape)
         return prp_state
 
     def get_lidar_data(self):
@@ -345,7 +346,13 @@ class BaseGazeboUAVVel3DTrajectoryTracking(gym.Env):
         pcd.points = o3d.utility.Vector3dVector(data)
         pcd = pcd.voxel_down_sample(0.08)
 
+        if distance.shape[0] == 0:
+            distance = np.full(shape=(max_points),fill_value=1.0)
+
         xyz_load = np.asarray(pcd.points)
+
+        if xyz_load.shape[0] == 0:            
+            return downsampled_pcd.flatten(),data,distance,contact
         
         downsampled_pcd[:xyz_load.shape[0],:] = xyz_load[:min(xyz_load.shape[0],max_points),:]
         downsampled_pcd[xyz_load.shape[0]:,:] = xyz_load[-1,:]

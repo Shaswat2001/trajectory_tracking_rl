@@ -107,7 +107,7 @@ def build_parse():
 def train(args1,args2,env1,env2,agent1,agent2,teacher):
 
     velocity_traj = []
-    s = env1.reset(pose = np.array([-5,-5,2]), pose_des = np.array([5,5,2]),max_time = 400)
+    s = env1.reset(pose = np.array([0,0,2]), pose_des = np.array([5,0,2]),max_time = 800)
     action = np.zeros((3))
 
     agent1.load("uam_vel_gazebo_tracking_3d")
@@ -121,14 +121,14 @@ def train(args1,args2,env1,env2,agent1,agent2,teacher):
 
         action = agent1.choose_action(s,"testing")
 
-        if (np.min(env1.distance) < 1 and env2.collision_switch(env1.lidar_data,action[0])):
+        if (np.min(env1.distance) < 1.0 and env2.collision_switch(env1.lidar_data,action[0])):
             s = env1.get_intermediate_state()
             print("MAKING SWITCH")
             action = agent2.choose_action(s,"testing")
-            action = np.append(action,0)
+            # action = np.append(action,0)
 
         print(f"Time in seconds : {time.time() - start_time}")
-
+        action[0,-1] = 0.0
         next_state,rwd,done,info = env1.step(action)
         velocity_traj.append(list(env1.pose))
         # print(next_state)   
