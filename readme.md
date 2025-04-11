@@ -1,1 +1,1 @@
-# Path Planning based RL for aerial manipulation
+# Path Planning based RL for UAVs
